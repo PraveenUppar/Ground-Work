@@ -4,12 +4,84 @@ A fact knowledge layer for PDF documents.
 
 It reads PDFs, pulls out the claims inside them, **proves each claim against the
 source text**, and then compares claims to say whether they agree, disagree, or
-only *look* like they disagree.
+only _look_ like they disagree.
 
 ```
 227 pages  →  353 passages  →  3,960 claims  →  3,033 proved  →  8,366 comparisons
-                                                    (76.6%)         99.8% by rule
+                                                    (76.6%)
 ```
+
+---
+
+## How it works
+
+Nine stages. Each writes to the database before the next runs, so any stage can
+crash without losing what came before, and any stage can be re-run alone.
+
+|     | Stage                          | Turns      | Into                                 |
+| --- | ------------------------------ | ---------- | ------------------------------------ |
+| 1   | `step_01_ingest_pdf`           | a PDF      | pages: text, tables, footnotes       |
+| 2   | `step_02_build_chunks`         | pages      | passages with their context attached |
+| 3   | `step_03_extract_facts`        | a passage  | structured claims                    |
+| 4   | `step_04_check_grounding`      | claims     | **proved claims, or rejections**     |
+| 5   | `step_05_normalize_facts`      | raw values | comparable values                    |
+| 6   | `step_06_find_candidate_pairs` | all facts  | the pairs worth comparing            |
+| 7   | `step_07_adjudicate_pairs`     | a pair     | a verdict and a written reason       |
+
+### Four decisions worth explaining
+
+**Every fact must carry proof.** The model must copy its evidence verbatim; we
+then search for that string in the passage it came from. No match, no fact. This
+is the difference between _"a model said so"_ and \_"the document says so, on this
+page, at this character".
+
+**Rules first, model last.** A deterministic rule tree judges every pair; the
+model is asked only about the handful the rules cannot settle. **99.8% of
+verdicts came from rules.** When someone asks _"how much of this is a model's
+opinion?"_, the answer is a number — every relation records which
+decided it.
+
+**The order of the rule tree is the argument.** Each branch asks _"is there a
+stated reason these could differ without either being wrong?"_ Only when every
+such reason is exhausted may the word _contradicts_ be used. Check values first
+and context second, and you report a contradiction for every pair of figures
+covering different years.
+
+**Never block on a field the adjudicator needs.** Pairs are grouped by entity and
+attribute family
+
+### Nothing is document-specific
+
+The system is tested on unseen PDFs.
+
+- The extraction prompt never names revenue, headcount, directors or logistics.
+  Its worked examples use invented companies.
+
+---
+
+## What this does not do
+
+Stated plainly, because a system that hides its limits cannot be trusted with the
+ones it reports.
+
+**Grounding proves the text, not the pairing.** A fact can quote a real table row
+containing three numbers and no column headings. The quote is honest; the pairing
+may still be wrong. 98.4% of facts have their value present inside their own
+evidence, which narrows this but does not close it.
+
+**Undetected tables force a guess.** On financial-statement pages with no ruling
+lines, `pdfplumber` finds no table, so labels and numbers survive as separate
+columns and the model aligns them by position. Grounding rejects most of these —
+the 23% rejection rate is largely this. The fix is to reconstruct tables from the
+line coordinates we already have; it did not fit the time budget.
+
+**Attribute families are grouped by spelling, then by one model pass.**
+"Workforce strength" and "team size" share no characters and would not group
+without that pass, which is deliberately conservative.
+
+**1,235 contradictions is more than are real.** Many are facts sharing an
+attribute family that should not, or figures with no stated period. The
+interface's _four cases_ view applies stricter criteria to surface credible ones.
 
 ---
 
@@ -20,18 +92,18 @@ only *look* like they disagree.
 > "Revenue for the year ended 31 March 2024 was ₹1,240 crore on a consolidated basis."
 
 As text, that can only be matched against another sentence by how similar the
-words look — which says nothing about whether the two *agree*. So it is broken
+words look — which says nothing about whether the two _agree_. So it is broken
 into slots:
 
-| Slot | Value | |
-|---|---|---|
-| subject | Example Company Ltd | |
-| attribute | revenue | |
-| value | 1240 · INR crore | |
-| **period** | **2023-04-01 → 2024-03-31** | **qualifier** |
-| **scope** | **consolidated** | **qualifier** |
-| evidence | the exact sentence above | proof |
-| location | doc 1, page 42, chars 1180–1265 | proof |
+| Slot       | Value                           |               |
+| ---------- | ------------------------------- | ------------- |
+| subject    | Example Company Ltd             |               |
+| attribute  | revenue                         |               |
+| value      | 1240 · INR crore                |               |
+| **period** | **2023-04-01 → 2024-03-31**     | **qualifier** |
+| **scope**  | **consolidated**                | **qualifier** |
+| evidence   | the exact sentence above        | proof         |
+| location   | doc 1, page 42, chars 1180–1265 | proof         |
 
 **The qualifiers are the point.** Most extraction schemas stop at subject,
 attribute and value — and then report a contradiction every time two figures
@@ -86,7 +158,7 @@ Found independently elsewhere in the corpus:
 → RECONCILED.   8,703.00 + 160.03 = 8,863.03
 ```
 
-The system does not merely *label* this a reconciliation — it goes looking for a
+The system does not merely _label_ this a reconciliation — it goes looking for a
 third documented quantity that accounts for exactly the gap, and shows the
 arithmetic.
 
@@ -99,17 +171,17 @@ Jiang Bo   "Appointment as non-executive additional director"  25 Jun 2020
 → SUPERSEDED, not CONTRADICTS.
 ```
 
-The documents agree perfectly; the world moved between them. Telling *"these
-documents disagree"* apart from *"this thing changed"* is the difference between
+The documents agree perfectly; the world moved between them. Telling _"these
+documents disagree"_ apart from _"this thing changed"_ is the difference between
 a useful tool and an alarm that cries wolf. It also caught the company renaming
-itself from *Delhivery Private Limited* to *Delhivery Limited*.
+itself from _Delhivery Private Limited_ to _Delhivery Limited_.
 
 ### 4 · An extraction failure, and how it was handled
 
 **927 of 3,960 facts (23%) were rejected** because their quoted evidence does not
 exist in the document.
 
-Asked to quote a table row verbatim, the model instead *assembled* evidence,
+Asked to quote a table row verbatim, the model instead _assembled_ evidence,
 gluing a row's label to the one value it meant:
 
 ```
@@ -117,7 +189,7 @@ returned:  "Bad debt written off\n0.02"
 on page:   "Bad debt written off | 0.02 | 0.44"
 ```
 
-Helpful in intent — it was showing *which* number it claimed — but that string
+Helpful in intent — it was showing _which_ number it claimed — but that string
 appears nowhere in the document. Every one was caught.
 
 **How it was handled:** the prompt was fixed, not the check. Relaxing grounding
@@ -130,90 +202,6 @@ exact.
 including five caused by this project's own code and caught by it — among them a
 derivation check that "proved" a gap of 4 using an unrelated quantity of 4, and a
 word-boundary bug that made `>2.8Bn` parse as `2.8`.
-
----
-
-## How it works
-
-Nine stages. Each writes to the database before the next runs, so any stage can
-crash without losing what came before, and any stage can be re-run alone.
-
-| | Stage | Turns | Into |
-|---|---|---|---|
-| 1 | `step_01_ingest_pdf` | a PDF | pages: text, tables, footnotes |
-| 2 | `step_02_build_chunks` | pages | passages with their context attached |
-| 3 | `step_03_extract_facts` | a passage | structured claims |
-| 4 | `step_04_check_grounding` | claims | **proved claims, or rejections** |
-| 5 | `step_05_normalize_facts` | raw values | comparable values |
-| 6 | `step_06_find_candidate_pairs` | all facts | the pairs worth comparing |
-| 7 | `step_07_adjudicate_pairs` | a pair | a verdict and a written reason |
-
-### Four decisions worth explaining
-
-**Every fact must carry proof.** The model must copy its evidence verbatim; we
-then search for that string in the passage it came from. No match, no fact. This
-is the difference between *"a model said so"* and *"the document says so, on this
-page, at this character"* — and it is what caught the 927.
-
-**Rules first, model last.** A deterministic rule tree judges every pair; the
-model is asked only about the handful the rules cannot settle. **99.8% of
-verdicts came from rules.** When someone asks *"how much of this is a model's
-opinion?"*, the answer is a number, not a shrug — every relation records which
-decided it.
-
-**The order of the rule tree is the argument.** Each branch asks *"is there a
-stated reason these could differ without either being wrong?"* Only when every
-such reason is exhausted may the word *contradicts* be used. Check values first
-and context second, and you report a contradiction for every pair of figures
-covering different years.
-
-**Never block on a field the adjudicator needs.** Pairs are grouped by entity and
-attribute family — deliberately **not** by date. Putting the date in the grouping
-key would mean a director active in 2022 and resigned in 2024 never meet, and the
-most interesting cases vanish with no error raised.
-
-### Nothing is document-specific
-
-The brief forbids hard-coded rules, and the system is tested on unseen PDFs.
-
-- The extraction prompt never names revenue, headcount, directors or logistics.
-  Its worked examples use invented companies.
-- Page furniture, headings and footnotes are recognised by **font size and
-  position**, never by matching text. "Smallest type pressed against an edge" is
-  page furniture in any document.
-- Registry identifiers are found by **shape** — "short uppercase label, then a
-  long alphanumeric code" — so the code has no idea what a DIN is, and would
-  equally catch an ISIN or a DUNS number.
-- **The financial year end is learned from the documents**, by reading every
-  explicit "year ended \<date\>" phrase and taking the most common. An Indian
-  report ends in March and an American one in December, and `FY24` means
-  different things in each. The convention is *input*, not code.
-
----
-
-## What this does not do
-
-Stated plainly, because a system that hides its limits cannot be trusted with the
-ones it reports.
-
-**Grounding proves the text, not the pairing.** A fact can quote a real table row
-containing three numbers and no column headings. The quote is honest; the pairing
-may still be wrong. 98.4% of facts have their value present inside their own
-evidence, which narrows this but does not close it.
-
-**Undetected tables force a guess.** On financial-statement pages with no ruling
-lines, `pdfplumber` finds no table, so labels and numbers survive as separate
-columns and the model aligns them by position. Grounding rejects most of these —
-the 23% rejection rate is largely this. The fix is to reconstruct tables from the
-line coordinates we already have; it did not fit the time budget.
-
-**Attribute families are grouped by spelling, then by one model pass.**
-"Workforce strength" and "team size" share no characters and would not group
-without that pass, which is deliberately conservative.
-
-**1,235 contradictions is more than are real.** Many are facts sharing an
-attribute family that should not, or figures with no stated period. The
-interface's *four cases* view applies stricter criteria to surface credible ones.
 
 ---
 
@@ -268,13 +256,13 @@ prompt version changed.
 
 ## Documentation
 
-| | |
-|---|---|
-| [docs/01_ARCHITECTURE.md](docs/01_ARCHITECTURE.md) | the parts, the data model, why each choice |
-| [docs/02_PIPELINE.md](docs/02_PIPELINE.md) | one fact traced through all seven stages |
-| [docs/03_APPROACH.md](docs/03_APPROACH.md) | 23 decisions, each with its cost |
-| [docs/04_FAILURES.md](docs/04_FAILURES.md) | 37 failures, what broke and what we did |
-| [docs/05_TODO.md](docs/05_TODO.md) | build log, and a reading order for the code |
+|                                                    |                                             |
+| -------------------------------------------------- | ------------------------------------------- |
+| [docs/01_ARCHITECTURE.md](docs/01_ARCHITECTURE.md) | the parts, the data model, why each choice  |
+| [docs/02_PIPELINE.md](docs/02_PIPELINE.md)         | one fact traced through all seven stages    |
+| [docs/03_APPROACH.md](docs/03_APPROACH.md)         | 23 decisions, each with its cost            |
+| [docs/04_FAILURES.md](docs/04_FAILURES.md)         | 37 failures, what broke and what we did     |
+| [docs/05_TODO.md](docs/05_TODO.md)                 | build log, and a reading order for the code |
 
 Every source file opens with a comment explaining why it exists and what it
 refuses to do. Where a decision was hard, the reasoning sits beside the code.
