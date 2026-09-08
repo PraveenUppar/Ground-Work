@@ -215,18 +215,50 @@ def load_facts_with_their_source_text(document_id: str | None) -> list[dict]:
     One query rather than three thousand. The database is remote, so a query
     per fact would be an hour of waiting.
     """
-    query = """
-        SELECT f.fact_id, f.page_no, f.evidence_text, f.value_raw,
-               c.text        AS chunk_text,
-               c.char_start  AS chunk_char_start,
-               p.raw_text    AS page_text
-        FROM facts f
-        JOIN chunks c ON c.chunk_id = f.chunk_id
-        JOIN pages  p ON p.doc_id = f.doc_id AND p.page_no = f.page_no
-    """
-    if document_id:
-        return database.fetch_all_rows(query + " WHERE f.doc_id = %s", (document_id,))
-    return database.fetch_all_rows(query)
+    # Fetched in three separate queries and joined in Python, rather than one
+    # query with two JOINs.
+    #
+    # The single-query version returned the full text of a page once for EVERY
+    # fact on that page, and the full text of a chunk once for every fact in
+    # it. Across five thousand facts that is a great deal of duplicated text
+    # travelling over the network, and on a long run it was enough to break the
+    # connection outright. Fetching each page and each chunk once and matching
+    # them up locally sends a fraction of the data.
+    where_clause = " WHERE f.doc_id = %s" if document_id else ""
+    parameters = (document_id,) if document_id else ()
+
+    fact_rows = database.fetch_all_rows(
+        "SELECT fact_id, doc_id, page_no, chunk_id, evidence_text, value_raw "
+        "FROM facts f" + where_clause,
+        parameters,
+    )
+
+    chunk_text_by_id = {
+        row["chunk_id"]: (row["text"], row["char_start"])
+        for row in database.fetch_all_rows(
+            "SELECT chunk_id, text, char_start FROM chunks c"
+            + (" WHERE c.doc_id = %s" if document_id else ""),
+            parameters,
+        )
+    }
+    page_text_by_id = {
+        (row["doc_id"], row["page_no"]): row["raw_text"]
+        for row in database.fetch_all_rows(
+            "SELECT doc_id, page_no, raw_text FROM pages p"
+            + (" WHERE p.doc_id = %s" if document_id else ""),
+            parameters,
+        )
+    }
+
+    for fact_row in fact_rows:
+        chunk_text, chunk_starts_at = chunk_text_by_id.get(fact_row["chunk_id"], ("", 0))
+        fact_row["chunk_text"] = chunk_text
+        fact_row["chunk_char_start"] = chunk_starts_at
+        fact_row["page_text"] = page_text_by_id.get(
+            (fact_row["doc_id"], fact_row["page_no"]), ""
+        )
+
+    return fact_rows
 
 
 def save_what_we_learned(results: list[dict]) -> int:

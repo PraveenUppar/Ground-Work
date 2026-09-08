@@ -49,12 +49,23 @@ def get_database_connection():
     """
     global _shared_connection
 
-    connection_is_alive = (
-        _shared_connection is not None
-        and not _shared_connection.closed
-    )
-    if connection_is_alive:
-        return _shared_connection
+    # "Not closed" is not the same as "usable". A connection to a hosted
+    # database can be dropped at the other end — an idle timeout, a network
+    # blip — and still report itself as open, then fail on the next query with
+    # "SSL connection has been closed unexpectedly". That happened on a long
+    # run, so we ask the connection a trivial question rather than trusting its
+    # own opinion of itself.
+    if _shared_connection is not None and not _shared_connection.closed:
+        try:
+            with _shared_connection.cursor() as checking_cursor:
+                checking_cursor.execute("SELECT 1")
+            return _shared_connection
+        except Exception:
+            try:
+                _shared_connection.close()
+            except Exception:
+                pass
+            _shared_connection = None
 
     config.stop_unless_these_settings_are_filled_in(["DATABASE_URL"])
 

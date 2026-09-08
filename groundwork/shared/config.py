@@ -166,7 +166,7 @@ MOST_PAIRS_TO_ASK_THE_MODEL_ABOUT = read_whole_number_setting(
 # document would spend the lot in a single click. Raise it for local use; keep
 # it low anywhere a stranger can reach it.
 MOST_PAGES_ONE_UPLOAD_MAY_PROCESS = read_whole_number_setting(
-    "MOST_PAGES_ONE_UPLOAD_MAY_PROCESS", 25
+    "MOST_PAGES_ONE_UPLOAD_MAY_PROCESS", 50
 )
 
 # How many rows we send to the database in one write. The database is hosted,

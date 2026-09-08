@@ -617,9 +617,10 @@ THE_SEVEN_STAGES = [
      "Sending each passage to the model and asking for structured claims with "
      "verbatim evidence. This is the slow stage — everything else is local.",
      "SLOW"),
-    ("Proving each claim",
+    ("Proving every claim in the corpus",
      "Searching for every quoted piece of evidence in the passage it claims to "
-     "come from. Anything not found is rejected.", "fast"),
+     "come from. Anything not found is rejected. This runs over ALL documents, "
+     "not only the new one — see the note in the code for why.", "fast"),
     ("Normalising",
      "Parsing numbers, dates and periods; resolving entities; grouping "
      "attribute phrases that mean the same thing.", "medium"),
@@ -738,17 +739,34 @@ def page_upload() -> None:
                    f"model requests  ·  {extracted['with_a_period']} carry a "
                    f"period, {extracted['with_a_scope']} carry a scope")
 
-        fact_rows = step_04_check_grounding.load_facts_with_their_source_text(
-            summary["document_id"]
-        )
+        # Grounding runs over EVERY document, not just the one just uploaded.
+        #
+        # This was a real bug. Grounding only the new document, then running
+        # pairing and comparison across the whole corpus, means any other
+        # document whose facts are not currently grounded silently drops out of
+        # every comparison — and nothing reports it, because zero pairs is a
+        # valid outcome. It happened: re-extracting a document resets its
+        # grounded flag, and the next upload produced a dashboard reading
+        # "0 of 4,965 facts proved" with no error anywhere.
+        #
+        # Grounding is pure string searching with no API calls, so running it
+        # over everything costs seconds and makes the pipeline self-healing.
+        database.execute_sql("DELETE FROM failures WHERE stage = 'ground'")
+        fact_rows = step_04_check_grounding.load_facts_with_their_source_text(None)
         grounding = [step_04_check_grounding.ground_one_fact(r) for r in fact_rows]
         step_04_check_grounding.save_what_we_learned(grounding)
         step_04_check_grounding.record_the_rejections(
             grounding, {r["fact_id"]: r for r in fact_rows}
         )
         proved = sum(1 for r in grounding if r["grounded"])
-        advance(4, f"{proved} of {len(grounding)} claims proved against the "
-                   f"source ({proved / max(1, len(grounding)):.0%})  ·  "
+        if proved == 0:
+            raise RuntimeError(
+                f"None of the {len(grounding)} facts could be proved against "
+                "their source. Something is wrong upstream — stopping rather "
+                "than building comparisons on nothing."
+            )
+        advance(4, f"{proved} of {len(grounding)} claims proved across all "
+                   f"documents ({proved / max(1, len(grounding)):.0%})  ·  "
                    f"{len(grounding) - proved} rejected")
 
         step_05_normalize_facts.main()
@@ -757,6 +775,14 @@ def page_upload() -> None:
 
         step_06_find_candidate_pairs.main()
         pairs = database.count_rows_in_table("relations")
+        if pairs == 0:
+            # Zero pairs is a valid outcome for a corpus of one short document,
+            # so nothing downstream would complain. That silence is exactly how
+            # the earlier failure went unnoticed, so we complain here instead.
+            raise RuntimeError(
+                "No pairs worth comparing were produced. Either no facts are "
+                "grounded, or normalisation did not assign entities."
+            )
         advance(6, f"{pairs:,} pairs worth comparing")
 
         step_07_adjudicate_pairs.main()
