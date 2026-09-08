@@ -1,0 +1,24 @@
+# Secrets — never commit these
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Cached LLM responses. Local only, can be large, and regenerates itself.
+data/llm_cache/
+
+# Source PDFs.
+# Delete the line below if you want the sample PDFs included in the repo so a
+# reviewer can run the pipeline without supplying their own documents.
+data/input_pdfs/*.pdf
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

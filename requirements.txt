@@ -1,0 +1,25 @@
+# --- Reading PDFs -----------------------------------------------------------
+pymupdf              # fast text extraction, gives position of every text block
+pdfplumber           # table extraction, which pymupdf does not do well
+
+# --- Talking to the LLM -----------------------------------------------------
+google-genai         # official Google Gemini SDK
+
+# --- Checking the LLM's output is the right shape ---------------------------
+pydantic             # rejects malformed JSON before it reaches the database
+
+# --- Database ---------------------------------------------------------------
+psycopg[binary]      # PostgreSQL driver. Plain SQL, no ORM layer to learn.
+
+# --- Comparing text without a heavy ML install ------------------------------
+# rapidfuzz alone turned out to be enough. scikit-learn was listed here for
+# TF-IDF similarity and never used, so it is gone — it is roughly 40 MB and
+# would slow every deployment for nothing.
+rapidfuzz            # fast fuzzy string matching for names and attributes
+
+# --- Interface --------------------------------------------------------------
+streamlit            # upload page + fact browser + evidence viewer
+
+# --- Everything else --------------------------------------------------------
+python-dotenv        # loads the .env file
+pytest               # test runner

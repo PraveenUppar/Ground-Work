@@ -1,0 +1,13 @@
+.\.venv\Scripts\streamlit.exe run groundwork\app\streamlit_app.py
+
+Check what's in the database
+.\.venv\Scripts\python.exe scripts\show_pipeline_status.py
+
+Re-run the whole pipeline
+.\.venv\Scripts\python.exe -u -m groundwork.step_01_ingest_pdf
+.\.venv\Scripts\python.exe -u -m groundwork.step_02_build_chunks
+.\.venv\Scripts\python.exe -u -m groundwork.step_03_extract_facts
+.\.venv\Scripts\python.exe -u -m groundwork.step_04_check_grounding
+.\.venv\Scripts\python.exe -u -m groundwork.step_05_normalize_facts
+.\.venv\Scripts\python.exe -u -m groundwork.step_06_find_candidate_pairs
+.\.venv\Scripts\python.exe -u -m groundwork.step_07_adjudicate_pairs
