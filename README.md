@@ -2,6 +2,10 @@
 
 A fact knowledge layer for PDF documents.
 
+Live Demo - https://ground-work-superjoin.streamlit.app/
+
+Demo Video -
+
 It reads PDFs, pulls out the claims inside them, **proves each claim against the
 source text**, and then compares claims to say whether they agree, disagree, or
 only _look_ like they disagree.
@@ -12,6 +16,70 @@ only _look_ like they disagree.
 ```
 
 ---
+
+## The Pipeline
+
+```
+   PDF file
+      |
+      v
+ [1] INGEST ............. text blocks + tables + footnotes, per page
+      |
+      v
+ [2] CHUNK .............. attach section heading, units note and footnote
+      |                   bodies so each chunk can stand on its own
+      v
+ [3] EXTRACT ............ LLM reads the chunk, returns structured claims
+      |
+      v
+ [4] GROUND ............. does the quoted evidence really exist in the
+      |                   chunk? no -> reject it and log why
+      v
+ [5] NORMALIZE .......... "1,240" -> 1240 ; "FY24" -> a date range ;
+      |                   "Acme Ltd" and "Acme Limited" -> one entity id
+      v
+ [6] PAIR ............... group facts so we compare hundreds of pairs,
+      |                   not millions
+      v
+ [7] ADJUDICATE ......... rules first, LLM only for the leftovers
+      |
+      v
+   VERDICT + EXPLANATION  ->  stored, then shown in the interface
+```
+
+## The one idea everything rests on
+
+**You cannot compare two sentences. You can compare two structured claims.**
+
+Take this sentence out of an annual report:
+
+> "Revenue for the year ended 31 March 2024 was Rs 1,240 crore on a consolidated basis."
+
+On its own it is just text. Ground Work breaks it into slots:
+
+| Slot      | Value                           | What it is for                         |
+| --------- | ------------------------------- | -------------------------------------- |
+| subject   | Example Company Ltd             | who or what the claim is about         |
+| attribute | revenue                         | what property is being claimed         |
+| value     | 1240                            | the claimed amount                     |
+| unit      | INR crore                       | the scale, so numbers can be converted |
+| period    | 2023-04-01 to 2024-03-31        | **qualifier**                          |
+| scope     | consolidated                    | **qualifier**                          |
+| evidence  | the exact sentence above        | proof                                  |
+| location  | doc_1, page 42, chars 1180-1265 | where the proof lives                  |
+
+Two claims in this shape can be lined up slot by slot.
+
+**The qualifiers are the important part.** Most systems extract subject, attribute
+and value, then declare a contradiction whenever two values differ. That is wrong
+most of the time. Revenue of 1,240 and revenue of 980 is not a contradiction if one
+is FY24 and the other is FY23. Without the qualifiers you cannot tell the
+difference — and you also cannot produce the "apparent contradiction explained by
+context" case at all.
+
+---
+
+<!-- ---
 
 ## How it works
 
@@ -28,48 +96,7 @@ crash without losing what came before, and any stage can be re-run alone.
 | 6   | `step_06_find_candidate_pairs` | all facts  | the pairs worth comparing            |
 | 7   | `step_07_adjudicate_pairs`     | a pair     | a verdict and a written reason       |
 
-### Four decisions worth explaining
-
-**Every fact must carry proof.** The model must copy its evidence verbatim; we
-then search for that string in the passage it came from. No match, no fact.
-
-**Rules first, model last.** A deterministic rule tree judges every pair; the
-model is asked only about the handful the rules cannot settle.
-
-**The order of the rule tree is the argument.** Each branch asks _"is there a
-stated reason these could differ without either being wrong?"_ Only when every
-such reason is exhausted may the word _contradicts_ be used. Check values first
-and context second, and you report a contradiction for every pair of figures
-covering different years.
-
-**Never block on a field the adjudicator needs.** Pairs are grouped by entity and
-attribute family
-
-## The one idea everything rests on
-
-**You cannot compare two sentences. You can compare two structured claims.**
-
-> "Revenue for the year ended 31 March 2024 was ₹1,240 crore on a consolidated basis."
-
-As text, that can only be matched against another sentence by how similar the
-words look — which says nothing about whether the two _agree_. So it is broken
-into slots:
-
-| Slot       | Value                           |               |
-| ---------- | ------------------------------- | ------------- |
-| subject    | Example Company Ltd             |               |
-| attribute  | revenue                         |               |
-| value      | 1240 · INR crore                |               |
-| **period** | **2023-04-01 → 2024-03-31**     | **qualifier** |
-| **scope**  | **consolidated**                | **qualifier** |
-| evidence   | the exact sentence above        | proof         |
-| location   | doc 1, page 42, chars 1180–1265 | proof         |
-
-**The qualifiers are the point.** Most extraction schemas stop at subject,
-attribute and value — and then report a contradiction every time two figures
-differ. Revenue of 1,240 and revenue of 980 do not disagree if one is FY24 and
-the other FY23. Without period, as-of date and scope you cannot tell a real
-contradiction from a difference that context fully explains.
+--- -->
 
 ## Running it
 
@@ -83,7 +110,7 @@ python -m venv .venv
 
 Copy `.env.example` to `.env` and fill in `DATABASE_URL` and `GOOGLE_API_KEY`.
 Read the comments in that file — the model choice and rate limits matter, and the
-free-tier quotas are documented there because guessing them cost us a day.
+free-tier quotas are documented.
 
 ```bash
 .\.venv\Scripts\python.exe scripts\create_database_tables.py
