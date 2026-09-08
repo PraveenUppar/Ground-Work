@@ -122,13 +122,12 @@ prompt version changed.
 
 ## Documentation
 
-|                                                    |                                             |
-| -------------------------------------------------- | ------------------------------------------- |
-| [docs/01_ARCHITECTURE.md](docs/01_ARCHITECTURE.md) | the parts, the data model, why each choice  |
-| [docs/02_PIPELINE.md](docs/02_PIPELINE.md)         | one fact traced through all seven stages    |
-| [docs/03_APPROACH.md](docs/03_APPROACH.md)         | 23 decisions, each with its cost            |
-| [docs/04_FAILURES.md](docs/04_FAILURES.md)         | 37 failures, what broke and what we did     |
-| [docs/05_TODO.md](docs/05_TODO.md)                 | build log, and a reading order for the code |
+|                                                    |                                            |
+| -------------------------------------------------- | ------------------------------------------ |
+| [docs/01_ARCHITECTURE.md](docs/01_ARCHITECTURE.md) | the parts, the data model, why each choice |
+| [docs/02_PIPELINE.md](docs/02_PIPELINE.md)         | one fact traced through all seven stages   |
+| [docs/03_APPROACH.md](docs/03_APPROACH.md)         | 23 decisions, each with its cost           |
+| [docs/04_FAILURES.md](docs/04_FAILURES.md)         | 37 failures, what broke and what we did    |
 
 Every source file opens with a comment explaining why it exists and what it
 refuses to do. Where a decision was hard, the reasoning sits beside the code.
