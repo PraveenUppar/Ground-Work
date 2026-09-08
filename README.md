@@ -4,7 +4,7 @@ A fact knowledge layer for PDF documents.
 
 Live Demo - https://ground-work-superjoin.streamlit.app/
 
-Demo Video -
+Demo Video - https://drive.google.com/file/d/1YVmeg-R35HaWrT2UL_qWC7wYC1uxMk4Y/view?usp=sharing
 
 It reads PDFs, pulls out the claims inside them, **proves each claim against the
 source text**, and then compares claims to say whether they agree, disagree, or
